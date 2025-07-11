@@ -1,9 +1,9 @@
-// babel.config.js
-
-module.exports = function (api) {
+module.exports = function(api) {
   api.cache(true);
   return {
-    presets: ["babel-preset-expo"],
-    plugins: [], // ← 中身を空にする
+    presets: ['babel-preset-expo'],
+    plugins: [
+      ['module:react-native-dotenv'],
+    ],
   };
 };
