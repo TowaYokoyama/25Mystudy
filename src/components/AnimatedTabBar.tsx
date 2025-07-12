@@ -3,10 +3,9 @@ import { View, TouchableOpacity, Animated, Text } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import tw from 'twrnc';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-// 【改善点1】react-native-safe-area-contextからuseSafeAreaInsetsをインポート
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// TabButtonコンポーネントは変更なし（省略）
+// TabButtonコンポーネント
 const TabButton = ({ route, isFocused, navigation }: { route: any, isFocused: boolean, navigation: any }) => {
   const animatedValue = React.useRef(new Animated.Value(0)).current;
   const animatedScale = animatedValue.interpolate({
@@ -46,7 +45,8 @@ const TabButton = ({ route, isFocused, navigation }: { route: any, isFocused: bo
 
   const AnimatedIcon = Animated.createAnimatedComponent(FontAwesome5);
   const AnimatedText = Animated.createAnimatedComponent(Text);
-  const textColor = isFocused ? tw.color('cyan-400') : tw.color('gray-500');
+  // ===== アクティブな色をオレンジに更新 =====
+  const textColor = isFocused ? tw.color('orange-500') : tw.color('gray-500');
 
   return (
     <TouchableOpacity
@@ -68,19 +68,17 @@ const TabButton = ({ route, isFocused, navigation }: { route: any, isFocused: bo
   );
 };
 
-
 // タブバー全体のコンポーネント
 export default function AnimatedTabBar({ state, navigation }: BottomTabBarProps) {
-  // 【改善点2】フックを呼び出して、画面下部のセーフエリアの高さを取得
   const { bottom } = useSafeAreaInsets();
 
   return (
-    // 【改善点3】取得したセーフエリアの高さを、高さと下のパディングに適用
     <View style={[
-      tw`flex-row bg-gray-900 border-t border-t-gray-800`,
+      // ===== 背景色とボーダーの色を黒基調に更新 =====
+      tw`flex-row bg-black border-t border-t-gray-900`,
       { 
-        height: 60 + bottom, // タブバーの基本の高さ(60) + 下のセーフエリアの高さ
-        paddingBottom: bottom // 下のパディングにセーフエリアの高さを設定
+        height: 60 + bottom,
+        paddingBottom: bottom
       }
     ]}>
       {state.routes.map((route, index) => {

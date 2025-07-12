@@ -32,12 +32,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-900 justify-center`}>
-      {/* sessionが存在すればAccount画面、なければAuth画面を表示 */}
-      {session && session.user ? (
-        <Account key={session.user.id} session={session} />
-      ) : (
-        <Auth />
-      )}
+     
     </SafeAreaView>
   )
 }

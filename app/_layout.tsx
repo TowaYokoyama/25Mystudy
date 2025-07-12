@@ -1,26 +1,52 @@
-// app/_layout.tsx
-
 import { Tabs } from 'expo-router';
-import AnimatedTabBar from '@/components/AnimatedTabBar'; // 作成したカスタムタブバーをインポート
+import AnimatedTabBar from '@/components/AnimatedTabBar';
+import { StatusBar } from 'expo-status-bar';
+import tw from 'twrnc';
 
 export default function TabLayout() {
   return (
-    <Tabs
-      // tabBarプロパティに自作コンポーネントを渡す
-      tabBar={(props) => <AnimatedTabBar {...props} />}
-    >
-      <Tabs.Screen
-        name="index" // app/index.tsx
-        options={{ headerShown: false }} // ヘッダーは不要なので非表示
-      />
-      <Tabs.Screen
-        name="sessions" // app/sessions.tsx
-        options={{ headerShown: false }}
-      />
-      <Tabs.Screen
-        name="profile" // app/profile.tsx
-        options={{ headerShown: false }}
-      />
-    </Tabs>
+    <>
+      {/* ステータスバーの文字色を白に設定 */}
+      <StatusBar style="light" />
+      <Tabs
+        // tabBarプロパティは変更なし
+        tabBar={(props) => <AnimatedTabBar {...props} />}
+        
+        // ===== 全画面共通のスクリーン設定を更新 =====
+        screenOptions={{
+          // --- ヘッダーのスタイル ---
+          headerShown: true, // ヘッダーを表示
+          headerStyle: {
+            backgroundColor: tw.color('black'), // 背景をリッチな黒に
+            shadowOpacity: 0, // iOSでの影を消す
+            elevation: 0, // Androidでの影を消す
+          },
+          headerTintColor: tw.color('gray-200'), // 文字色を少し柔らかい白に
+          headerTitleStyle: {
+            fontFamily: 'RobotoSlab-Bold', // フォントは共通
+          },
+        }}
+        // ==================================
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'ホーム', // ヘッダーに表示されるタイトル
+          }}
+        />
+        <Tabs.Screen
+          name="sessions"
+          options={{
+            title: '学習セッション', // ヘッダーに表示されるタイトル
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'プロフィール', // ヘッダーに表示されるタイトル
+          }}
+        />
+      </Tabs>
+    </>
   );
 }
