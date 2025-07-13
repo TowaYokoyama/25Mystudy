@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "MyApp",
+    "scheme": "myapp",
     "slug": "MyApp",
     "version": "1.0.0",
     "orientation": "portrait",

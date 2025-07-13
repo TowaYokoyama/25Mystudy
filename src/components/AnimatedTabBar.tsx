@@ -5,16 +5,19 @@ import tw from 'twrnc';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// TabButtonコンポーネント
+// TabButtonコンポーネント（変更なし）
 const TabButton = ({ route, isFocused, navigation }: { route: any, isFocused: boolean, navigation: any }) => {
   const animatedValue = React.useRef(new Animated.Value(0)).current;
   const animatedScale = animatedValue.interpolate({
     inputRange: [0, 100],
     outputRange: [1, 0.8],
   });
+
+  // ===== 新しいタブ構成に合わせてアイコンとタイトルを更新 =====
   const tabInfo: { [key: string]: { icon: string, title: string } } = {
-    index: { icon: 'home', title: 'ホーム' },
-    sessions: { icon: 'clock', title: 'セッション' },
+    timer: { icon: 'stopwatch', title: 'タイマー' },
+    cards: { icon: 'clone', title: 'カード' },
+    progress: { icon: 'chart-bar', title: '進捗' },
     profile: { icon: 'user-alt', title: 'プロフィール' },
   };
   const { icon, title } = tabInfo[route.name] || { icon: 'question-circle', title: route.name };
@@ -45,7 +48,6 @@ const TabButton = ({ route, isFocused, navigation }: { route: any, isFocused: bo
 
   const AnimatedIcon = Animated.createAnimatedComponent(FontAwesome5);
   const AnimatedText = Animated.createAnimatedComponent(Text);
-  // ===== アクティブな色をオレンジに更新 =====
   const textColor = isFocused ? tw.color('orange-500') : tw.color('gray-500');
 
   return (
@@ -68,13 +70,12 @@ const TabButton = ({ route, isFocused, navigation }: { route: any, isFocused: bo
   );
 };
 
-// タブバー全体のコンポーネント
+// タブバー全体のコンポーネント（変更なし）
 export default function AnimatedTabBar({ state, navigation }: BottomTabBarProps) {
   const { bottom } = useSafeAreaInsets();
 
   return (
     <View style={[
-      // ===== 背景色とボーダーの色を黒基調に更新 =====
       tw`flex-row bg-black border-t border-t-gray-900`,
       { 
         height: 60 + bottom,
