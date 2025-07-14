@@ -1,35 +1,25 @@
 // src/components/timers/CountdownTimer.tsx
 
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
 import tw from 'twrnc';
-import { formatTime } from '@/utils/helpers'; // 後で作成する共通関数
+import { formatTime } from '@/utils/helpers';
 
-export default function CountdownTimer() {
-  const [initialTime, setInitialTime] = useState(45 * 60);
-  const [time, setTime] = useState(initialTime);
-  const [isActive, setIsActive] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+interface Props {
+  time: number;
+  isActive: boolean;
+  setIsActive: (isActive: boolean) => void;
+  initialTime: number;
+  setInitialTime: (time: number) => void;
+}
 
-  useEffect(() => {
-    setTime(initialTime);
-  }, [initialTime]);
-
-  useEffect(() => {
-    if (isActive && time > 0) {
-      intervalRef.current = setInterval(() => setTime((t) => t - 1), 1000);
-    } else if (time === 0) {
-      setIsActive(false);
-      Alert.alert("時間です！", "タイマーが終了しました。");
-    }
-    if (!isActive && intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isActive, time]);
-
+export default function CountdownTimer({ time, isActive, setIsActive, initialTime, setInitialTime }: Props) {
   const handleStartStop = () => setIsActive(!isActive);
-  const handleReset = () => { setIsActive(false); setTime(initialTime); };
+  const handleReset = () => {
+    setIsActive(false);
+    // 親のタイマーコンテナにリセットを通知する必要があるが、
+    // 今回は親のuseEffectで処理されるため、ここでは何もしない
+  };
   const selectTime = (minutes: number) => {
     setIsActive(false);
     setInitialTime(minutes * 60);
@@ -39,11 +29,7 @@ export default function CountdownTimer() {
     <View style={tw`flex-1 justify-center items-center`}>
       <View style={tw`flex-row mb-8`}>
         {[45, 60, 80].map((min) => (
-          <TouchableOpacity 
-            key={min}
-            onPress={() => selectTime(min)}
-            style={[tw`mx-2 p-3 rounded-lg`, initialTime === min * 60 ? tw`bg-orange-600` : tw`bg-gray-800`]}
-          >
+          <TouchableOpacity key={min} onPress={() => selectTime(min)} style={[tw`mx-2 p-3 rounded-lg`, initialTime === min * 60 ? tw`bg-orange-600` : tw`bg-gray-800`]}>
             <Text style={[tw`text-white`, {fontFamily: 'RobotoSlab-Bold'}]}>{min}分</Text>
           </TouchableOpacity>
         ))}
