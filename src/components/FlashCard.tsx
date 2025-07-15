@@ -1,15 +1,16 @@
 // src/components/Flashcard.tsx
 
 import React, { useRef, useState } from 'react';
-import { View, Text, Pressable, Animated } from 'react-native';
+import { View, Text, Pressable, Animated, Image } from 'react-native';
 import tw from 'twrnc';
 
 interface Props {
-  frontText: string;
+  frontText: string | null;
   backText: string;
+  frontImageUrl: string | null;
 }
 
-export default function Flashcard({ frontText, backText }: Props) {
+export default function Flashcard({ frontText, backText ,frontImageUrl }: Props) {
   const [isFlipped, setIsFlipped] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -64,25 +65,30 @@ export default function Flashcard({ frontText, backText }: Props) {
     transform: [{ scale: scaleValue }],
   };
 
-  return (
-    // 遠近感を追加するための親View
-    <View style={{ transform: [{ perspective: 1000 }] }}>
+    return (
+    <View>
       <Pressable onPress={flipCard} onPressIn={onPressIn} onPressOut={onPressOut}>
-        <Animated.View style={[tw`w-full aspect-video`, cardAnimatedStyle]}>
+        <Animated.View style={[tw`w-full aspect-video`, { transform: [{ perspective: 1000 }, ...cardAnimatedStyle.transform] }]}>
           {/* カードの表面 */}
           <Animated.View
             style={[
               tw`absolute w-full h-full bg-gray-800 rounded-xl justify-center items-center p-4 shadow-lg`,
-              { backfaceVisibility: 'hidden' }, // 裏面を非表示にする
+              { backfaceVisibility: 'hidden' },
               frontAnimatedStyle,
             ]}
           >
-            <Text style={[tw`text-white text-xl text-center`, { fontFamily: 'RobotoSlab-Regular' }]}>
-              {frontText}
-            </Text>
+            {/* ===== ここから変更：画像がある場合は画像を表示 ===== */}
+            {frontImageUrl ? (
+              <Image source={{ uri: frontImageUrl }} style={tw`w-full h-full rounded-xl`} resizeMode="contain" />
+            ) : (
+              <Text style={[tw`text-white text-xl text-center`, { fontFamily: 'RobotoSlab-Regular' }]}>
+                {frontText}
+              </Text>
+            )}
+            {/* ===== ここまで変更 ===== */}
           </Animated.View>
 
-          {/* カードの裏面 */}
+          {/* カードの裏面 (変更なし) */}
           <Animated.View
             style={[
               tw`absolute w-full h-full bg-orange-600 rounded-xl justify-center items-center p-4 shadow-lg`,
