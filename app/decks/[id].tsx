@@ -1,14 +1,14 @@
 // app/decks/[id].tsx
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, FlatList, Dimensions, TouchableOpacity, Modal, TextInput } from 'react-native';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { View, Text, Alert, FlatList, Dimensions, TouchableOpacity, Modal, TextInput, SafeAreaView } from 'react-native';
+import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import tw from 'twrnc';
 import { useIsFocused } from '@react-navigation/native';
 import { FontAwesome5 } from '@expo/vector-icons';
 
-import Flashcard from '@/components/FlashCard'; // 作成したカードコンポーネントをインポート
+import Flashcard from '@/components/FlashCard'; // FlashCard.tsx からインポート
 
 interface Card {
   id: string;
@@ -18,6 +18,7 @@ interface Card {
 
 export default function DeckDetailScreen() {
   const { id: deckId, name } = useLocalSearchParams<{ id: string; name:string }>();
+  const router = useRouter();
   const [cards, setCards] = useState<Card[]>([]);
   const [isModalVisible, setModalVisible] = useState(false);
   const [frontText, setFrontText] = useState('');
@@ -36,7 +37,9 @@ export default function DeckDetailScreen() {
   };
 
   useEffect(() => {
-    if (isFocused) fetchCards();
+    if (isFocused) {
+      fetchCards();
+    }
   }, [isFocused]);
 
   const handleAddCard = async () => {
@@ -51,8 +54,9 @@ export default function DeckDetailScreen() {
       .from('flashcards')
       .insert({ front_text: frontText, back_text: backText, deck_id: deckId, user_id: user.id });
 
-    if (error) Alert.alert('カード追加エラー', error.message);
-    else {
+    if (error) {
+      Alert.alert('カード追加エラー', error.message);
+    } else {
       setFrontText('');
       setBackText('');
       setModalVisible(false);
@@ -61,8 +65,9 @@ export default function DeckDetailScreen() {
   };
 
   return (
-    <View style={tw`flex-1 bg-black`}>
-      <Stack.Screen options={{ title: name || 'デッキ' }} />
+    <SafeAreaView style={tw`flex-1 bg-black`}>
+      {/* この画面ではヘッダーとタブバーを非表示にする */}
+      <Stack.Screen options={{ headerShown: false }} />
 
       {/* カード追加モーダル */}
       <Modal visible={isModalVisible} transparent={true} animationType="slide">
@@ -81,19 +86,27 @@ export default function DeckDetailScreen() {
         </View>
       </Modal>
 
+      {/* 手動で設置するヘッダー */}
+      <View style={tw`flex-row items-center p-4`}>
+        <TouchableOpacity onPress={() => router.back()} style={tw`p-2`}>
+          <FontAwesome5 name="chevron-left" size={24} color="white" />
+        </TouchableOpacity>
+        <Text style={[tw`text-white text-xl ml-4`, { fontFamily: 'RobotoSlab-Bold' }]}>{name}</Text>
+      </View>
+
       {/* カード学習エリア */}
       <View style={tw`flex-1 justify-center items-center`}>
         <FlatList
           data={cards}
           renderItem={({ item }) => (
-            <View style={{ width: Dimensions.get('window').width, justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ width: Dimensions.get('window').width, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
               <Flashcard frontText={item.front_text} backText={item.back_text} />
             </View>
           )}
           keyExtractor={(item) => item.id}
-          horizontal // 横スクロールにする
-          pagingEnabled // ページ単位でスナップする
-          showsHorizontalScrollIndicator={false} // スクロールバーを非表示
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
           ListEmptyComponent={() => (
             <View style={tw`flex-1 justify-center items-center`}>
               <Text style={tw`text-gray-500`}>まだカードがありません。</Text>
@@ -110,6 +123,6 @@ export default function DeckDetailScreen() {
       >
         <FontAwesome5 name="plus" size={24} color="white" />
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
