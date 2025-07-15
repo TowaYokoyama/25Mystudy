@@ -8,12 +8,11 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { Link } from 'expo-router';
 
-// デッキの型を拡張
 interface Deck {
   id: string;
   name: string;
   description: string | null;
-  deck_type: 'text' | 'image'; // デッキタイプを追加
+  deck_type: 'text' | 'image';
 }
 
 export default function CardsScreen() {
@@ -21,18 +20,26 @@ export default function CardsScreen() {
   const [isModalVisible, setModalVisible] = useState(false);
   const [newDeckName, setNewDeckName] = useState('');
   const [newDeckDesc, setNewDeckDesc] = useState('');
-  const [newDeckType, setNewDeckType] = useState<'text' | 'image'>('text'); // デッキタイプロジック追加
+  const [newDeckType, setNewDeckType] = useState<'text' | 'image'>('text');
   const isFocused = useIsFocused();
 
   const fetchDecks = async () => {
-    // deck_typeも取得するように修正
     const { data, error } = await supabase.from('flashcard_decks').select('id, name, description, deck_type');
-    if (error) Alert.alert('エラー', 'デッキの取得に失敗しました。');
-    else setDecks(data as Deck[] || []);
+    
+    // ===== ここからが修正点 =====
+    // もしエラーがあれば、Supabaseからの「本当のエラーメッセージ」を表示する
+    if (error) {
+      Alert.alert('デッキ取得エラー', error.message);
+    } else {
+      setDecks(data as Deck[] || []);
+    }
+    // ===== ここまでが修正点 =====
   };
 
   useEffect(() => {
-    if (isFocused) fetchDecks();
+    if (isFocused) {
+      fetchDecks();
+    }
   }, [isFocused]);
 
   const handleAddDeck = async () => {
@@ -43,16 +50,17 @@ export default function CardsScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // deck_typeも一緒に保存するように修正
     const { error } = await supabase
       .from('flashcard_decks')
       .insert({ name: newDeckName, description: newDeckDesc, user_id: user.id, deck_type: newDeckType });
 
-    if (error) Alert.alert('デッキ作成エラー', error.message);
-    else {
+    // こちらも、もしエラーがあれば本当のメッセージを表示する
+    if (error) {
+      Alert.alert('デッキ作成エラー', error.message);
+    } else {
       setNewDeckName('');
       setNewDeckDesc('');
-      setNewDeckType('text'); // モーダルを閉じる時にデフォルトに戻す
+      setNewDeckType('text');
       setModalVisible(false);
       fetchDecks();
     }
@@ -60,7 +68,6 @@ export default function CardsScreen() {
 
   return (
     <View style={tw`flex-1 bg-black p-4`}>
-      {/* デッキ作成モーダル */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -72,8 +79,6 @@ export default function CardsScreen() {
             <Text style={[tw`text-white text-xl mb-4`, { fontFamily: 'RobotoSlab-Bold' }]}>
               新しいデッキを作成
             </Text>
-
-            {/* ===== ここから変更：デッキタイプ選択 ===== */}
             <View style={tw`flex-row justify-around mb-4`}>
               <TouchableOpacity onPress={() => setNewDeckType('text')} style={[tw`p-3 rounded-lg flex-1 mx-1`, newDeckType === 'text' ? tw`bg-orange-600` : tw`bg-gray-800`]}>
                 <Text style={tw`text-white text-center font-bold`}>テキスト</Text>
@@ -82,8 +87,6 @@ export default function CardsScreen() {
                 <Text style={tw`text-white text-center font-bold`}>画像</Text>
               </TouchableOpacity>
             </View>
-            {/* ===== ここまで変更 ===== */}
-
             <TextInput
               style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]}
               placeholder="デッキ名"
@@ -112,12 +115,10 @@ export default function CardsScreen() {
         </View>
       </Modal>
 
-      {/* デッキ一覧 */}
       <FlatList
         data={decks}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          // Linkにdeck_typeも渡すように修正
           <Link href={{ pathname: "/decks/[id]", params: { id: item.id, name: item.name, deck_type: item.deck_type } }} asChild>
             <TouchableOpacity style={tw`bg-gray-900 p-4 rounded-lg mb-3 flex-row items-center`}>
               <FontAwesome5 name={item.deck_type === 'image' ? 'image' : 'font'} size={20} color={tw.color('gray-400')} />
@@ -138,7 +139,6 @@ export default function CardsScreen() {
         )}
       />
 
-      {/* 新規作成ボタン */}
       <TouchableOpacity
         style={tw`absolute bottom-8 right-8 w-16 h-16 bg-orange-600 rounded-full justify-center items-center shadow-lg`}
         onPress={() => setModalVisible(true)}

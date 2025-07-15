@@ -7,28 +7,31 @@ import { supabase } from '@/lib/supabase';
 import tw from 'twrnc';
 import { useIsFocused } from '@react-navigation/native';
 import { FontAwesome5 } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker'; // ImagePickerをインポート
-import 'react-native-get-random-values'; // アップロードに必要
+import * as ImagePicker from 'expo-image-picker';
+import 'react-native-get-random-values';
+import * as FileSystem from 'expo-file-system';
+import { toByteArray } from 'base64-js';
+
 import Flashcard from '@/components/FlashCard';
-// Cardの型を拡張
+
 interface Card {
   id: string;
   front_text: string | null;
-  back_text: string;
-  front_image_url: string | null; // 画像URLを追加
+  back_text: string | null;
+  front_image_url: string | null;
+  back_image_url: string | null;
 }
 
 export default function DeckDetailScreen() {
-  // deck_typeも受け取る
   const { id: deckId, name, deck_type } = useLocalSearchParams<{ id: string; name: string; deck_type: 'text' | 'image' }>();
   const router = useRouter();
   const [cards, setCards] = useState<Card[]>([]);
   const [isModalVisible, setModalVisible] = useState(false);
   
-  // カード追加モーダルのためのstate
   const [frontText, setFrontText] = useState('');
   const [backText, setBackText] = useState('');
-  const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [frontImage, setFrontImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [backImage, setBackImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
 
   const isFocused = useIsFocused();
 
@@ -43,76 +46,84 @@ export default function DeckDetailScreen() {
     if (isFocused) fetchCards();
   }, [isFocused]);
 
-  // 画像を選択する関数
-  const pickImage = async () => {
+  const pickImage = async (side: 'front' | 'back') => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       quality: 1,
     });
 
     if (!result.canceled) {
-      setImage(result.assets[0]);
+      if (side === 'front') setFrontImage(result.assets[0]);
+      else setBackImage(result.assets[0]);
     }
   };
   
-  // カードを追加する関数
+  const uploadImage = async (image: ImagePicker.ImagePickerAsset, userId: string): Promise<string | null> => {
+    try {
+      const fileExt = image.uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${deckId}/${fileName}`;
+      const base64 = await FileSystem.readAsStringAsync(image.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const { error } = await supabase.storage.from('flashcards').upload(filePath, toByteArray(base64), { contentType: `image/${fileExt}` });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('flashcards').getPublicUrl(filePath);
+      return urlData.publicUrl;
+    } catch (error: any) {
+      Alert.alert('アップロードエラー', error.message);
+      return null;
+    }
+  };
+
   const handleAddCard = async () => {
     const isImageDeck = deck_type === 'image';
-    if (isImageDeck && !image) {
-      Alert.alert('エラー', '画像を選択してください。');
+
+    // バリデーション
+    if (isImageDeck && !frontImage) {
+      Alert.alert('エラー', '表面の画像を選択してください。');
       return;
     }
     if (!isImageDeck && !frontText.trim()) {
       Alert.alert('エラー', '問題（おもて）を入力してください。');
       return;
     }
-    if (!backText.trim()) {
-      Alert.alert('エラー', '答え（うら）を入力してください。');
+    if (!backText.trim() && !backImage) {
+      Alert.alert('エラー', '答え（うら）のテキストか画像、どちらかを入力してください。');
       return;
     }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !deckId) return;
 
-    let imageUrl: string | null = null;
-    // 画像デッキの場合、画像をアップロード
-    if (isImageDeck && image) {
-      const fileExt = image.uri.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${deckId}/${fileName}`;
-      
-      const formData = new FormData();
-      // @ts-ignore
-      formData.append('file', { uri: image.uri, name: fileName, type: image.type });
-      
-      const { error: uploadError } = await supabase.storage.from('flashcards').upload(filePath, formData);
-      if (uploadError) {
-        Alert.alert('アップロードエラー', uploadError.message);
-        return;
-      }
-
-      // 公開URLを取得
-      const { data: urlData } = supabase.storage.from('flashcards').getPublicUrl(filePath);
-      imageUrl = urlData.publicUrl;
+    // ===== ここからが修正点：データ保存ロジックの修正 =====
+    let frontImageUrl: string | null = null;
+    let backImageUrl: string | null = null;
+    let finalFrontText: string | null = frontText;
+    
+    if (isImageDeck) {
+      finalFrontText = null; // 画像デッキの場合、表面のテキストは保存しない
+      if (frontImage) frontImageUrl = await uploadImage(frontImage, user.id);
     }
-
-    // カードデータをデータベースに保存
+    if (backImage) backImageUrl = await uploadImage(backImage, user.id);
+    
     const { error: insertError } = await supabase
       .from('flashcards')
       .insert({
-        front_text: isImageDeck ? null : frontText,
+        front_text: finalFrontText,
         back_text: backText,
-        front_image_url: imageUrl,
+        front_image_url: frontImageUrl,
+        back_image_url: backImageUrl,
         deck_id: deckId,
         user_id: user.id,
       });
+    // ===== ここまでが修正点 =====
 
     if (insertError) Alert.alert('カード追加エラー', insertError.message);
     else {
       setFrontText('');
       setBackText('');
-      setImage(null);
+      setFrontImage(null);
+      setBackImage(null);
       setModalVisible(false);
       fetchCards();
     }
@@ -128,20 +139,27 @@ export default function DeckDetailScreen() {
           <View style={tw`bg-gray-900 p-6 rounded-2xl w-11/12`}>
             <Text style={[tw`text-white text-xl mb-4`, { fontFamily: 'RobotoSlab-Bold' }]}>新しいカードを追加</Text>
             
-            {/* デッキタイプに応じて入力欄を切り替え */}
+            {/* ===== ここからが修正点：入力欄の表示切り替え ===== */}
             {deck_type === 'image' ? (
-              <TouchableOpacity onPress={pickImage} style={tw`w-full h-32 bg-gray-800 rounded-lg justify-center items-center mb-4`}>
-                {image ? (
-                  <Image source={{ uri: image.uri }} style={tw`w-full h-full rounded-lg`} />
-                ) : (
-                  <Text style={tw`text-gray-400`}>画像を選択</Text>
-                )}
-              </TouchableOpacity>
+              <>
+                <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
+                <TouchableOpacity onPress={() => pickImage('front')} style={tw`w-full h-24 bg-gray-800 rounded-lg justify-center items-center mb-4`}>
+                  {frontImage ? <Image source={{ uri: frontImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択</Text>}
+                </TouchableOpacity>
+              </>
             ) : (
-              <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="問題（おもて）" placeholderTextColor={tw.color('gray-500')} value={frontText} onChangeText={setFrontText} />
+              <>
+                <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
+                <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="問題文" placeholderTextColor={tw.color('gray-500')} value={frontText} onChangeText={setFrontText} />
+              </>
             )}
             
-            <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="答え（うら）" placeholderTextColor={tw.color('gray-500')} value={backText} onChangeText={setBackText} />
+            <Text style={tw`text-gray-400 mb-2`}>答え（うら）</Text>
+            <TouchableOpacity onPress={() => pickImage('back')} style={tw`w-full h-24 bg-gray-800 rounded-lg justify-center items-center mb-2`}>
+              {backImage ? <Image source={{ uri: backImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択（任意）</Text>}
+            </TouchableOpacity>
+            <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="テキスト解説（任意）" placeholderTextColor={tw.color('gray-500')} value={backText} onChangeText={setBackText} />
+            {/* ===== ここまでが修正点 ===== */}
             
             <TouchableOpacity style={tw`bg-orange-600 rounded-lg py-3 items-center`} onPress={handleAddCard}>
               <Text style={[tw`text-white font-bold`, { fontFamily: 'RobotoSlab-Bold' }]}>追加</Text>
@@ -167,8 +185,7 @@ export default function DeckDetailScreen() {
           data={cards}
           renderItem={({ item }) => (
             <View style={{ width: Dimensions.get('window').width, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
-              {/* Flashcardコンポーネントに画像のURLも渡す */}
-              <Flashcard frontText={item.front_text} backText={item.back_text} frontImageUrl={item.front_image_url} />
+              <Flashcard frontText={item.front_text} backText={item.back_text} frontImageUrl={item.front_image_url} backImageUrl={item.back_image_url} />
             </View>
           )}
           keyExtractor={(item) => item.id}

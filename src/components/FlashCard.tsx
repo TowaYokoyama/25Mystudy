@@ -6,11 +6,11 @@ import tw from 'twrnc';
 
 interface Props {
   frontText: string | null;
-  backText: string;
+  backText: string | null;
   frontImageUrl: string | null;
+  backImageUrl: string | null;
 }
-
-export default function Flashcard({ frontText, backText ,frontImageUrl }: Props) {
+export default function Flashcard({ frontText, backText, frontImageUrl, backImageUrl }: Props) {
   const [isFlipped, setIsFlipped] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -96,6 +96,12 @@ export default function Flashcard({ frontText, backText ,frontImageUrl }: Props)
               backAnimatedStyle,
             ]}
           >
+            {/*裏面のスタイル */}
+            {backImageUrl ? (
+                <Image source={{ uri: backImageUrl}} style={tw`w-full h-full rounded-xl`} resizeMode="contain" />
+            ): (
+                 <Text style={[tw`text-white text-xl text-center`, { fontFamily: 'RobotoSlab-Bold' }]}>{backText}</Text>
+            )}
             <Text style={[tw`text-white text-xl text-center`, { fontFamily: 'RobotoSlab-Bold' }]}>
               {backText}
             </Text>
