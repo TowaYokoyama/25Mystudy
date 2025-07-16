@@ -2,12 +2,15 @@
 
 import { Slot } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import tw from 'twrnc';
 
 export default function RootLayout() {
-  // アプリ全体をSafeAreaProviderで囲む
   return (
-    <SafeAreaProvider>
-      <Slot />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={tw`flex-1`}>
+      <SafeAreaProvider>
+        <Slot />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

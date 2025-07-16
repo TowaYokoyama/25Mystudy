@@ -1,12 +1,17 @@
 // app/(tabs)/cards.tsx
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, Modal, TextInput, Alert, TouchableOpacity } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import tw from 'twrnc';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
-import { Link } from 'expo-router';
+// ===== ここからが修正点 =====
+// FlatListをreact-native-gesture-handlerからインポートする
+import { FlatList } from 'react-native-gesture-handler';
+// ===== ここまでが修正点 =====
+
+import FlickableDeckItem from '@/components/FlickableDeckItem';
 
 interface Deck {
   id: string;
@@ -24,22 +29,13 @@ export default function CardsScreen() {
   const isFocused = useIsFocused();
 
   const fetchDecks = async () => {
-    const { data, error } = await supabase.from('flashcard_decks').select('id, name, description, deck_type');
-    
-    // ===== ここからが修正点 =====
-    // もしエラーがあれば、Supabaseからの「本当のエラーメッセージ」を表示する
-    if (error) {
-      Alert.alert('デッキ取得エラー', error.message);
-    } else {
-      setDecks(data as Deck[] || []);
-    }
-    // ===== ここまでが修正点 =====
+    const { data, error } = await supabase.from('flashcard_decks').select('id, name, description, deck_type').order('created_at');
+    if (error) Alert.alert('エラー', 'デッキの取得に失敗しました。');
+    else setDecks(data as Deck[] || []);
   };
 
   useEffect(() => {
-    if (isFocused) {
-      fetchDecks();
-    }
+    if (isFocused) fetchDecks();
   }, [isFocused]);
 
   const handleAddDeck = async () => {
@@ -49,15 +45,12 @@ export default function CardsScreen() {
     }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
     const { error } = await supabase
       .from('flashcard_decks')
       .insert({ name: newDeckName, description: newDeckDesc, user_id: user.id, deck_type: newDeckType });
 
-    // こちらも、もしエラーがあれば本当のメッセージを表示する
-    if (error) {
-      Alert.alert('デッキ作成エラー', error.message);
-    } else {
+    if (error) Alert.alert('デッキ作成エラー', error.message);
+    else {
       setNewDeckName('');
       setNewDeckDesc('');
       setNewDeckType('text');
@@ -66,7 +59,12 @@ export default function CardsScreen() {
     }
   };
 
+  const onDeckDeleted = (deletedDeckId: string) => {
+    setDecks(currentDecks => currentDecks.filter(deck => deck.id !== deletedDeckId));
+  };
+
   return (
+    // GestureHandlerRootViewはapp/_layout.tsxにあるので、ここでは不要
     <View style={tw`flex-1 bg-black p-4`}>
       <Modal
         animationType="slide"
@@ -114,31 +112,22 @@ export default function CardsScreen() {
           </View>
         </View>
       </Modal>
-
+      
       <FlatList
         data={decks}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <Link href={{ pathname: "/decks/[id]", params: { id: item.id, name: item.name, deck_type: item.deck_type } }} asChild>
-            <TouchableOpacity style={tw`bg-gray-900 p-4 rounded-lg mb-3 flex-row items-center`}>
-              <FontAwesome5 name={item.deck_type === 'image' ? 'image' : 'font'} size={20} color={tw.color('gray-400')} />
-              <View style={tw`ml-4`}>
-                <Text style={[tw`text-white text-lg`, { fontFamily: 'RobotoSlab-Bold' }]}>{item.name}</Text>
-                {item.description && (
-                  <Text style={[tw`text-gray-400 mt-1`, { fontFamily: 'RobotoSlab-Regular' }]}>{item.description}</Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          </Link>
+          <FlickableDeckItem deck={item} onDelete={() => onDeckDeleted(item.id)} />
         )}
         ListEmptyComponent={() => (
           <View style={tw`flex-1 justify-center items-center mt-20`}>
             <Text style={tw`text-gray-500`}>まだデッキがありません。</Text>
-            <Text style={tw`text-gray-500`}>右下のボタンから作成しましょう！</Text>
           </View>
         )}
+        // スクロールとフリックが同時に機能するように設定
+        simultaneousHandlers={[]}
       />
-
+      
       <TouchableOpacity
         style={tw`absolute bottom-8 right-8 w-16 h-16 bg-orange-600 rounded-full justify-center items-center shadow-lg`}
         onPress={() => setModalVisible(true)}
