@@ -1,7 +1,7 @@
 // app/decks/[id].tsx
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, FlatList, Dimensions, TouchableOpacity, Modal, TextInput, SafeAreaView, Image } from 'react-native';
+import { View, Text, Alert, FlatList, Dimensions, TouchableOpacity, Modal, TextInput, SafeAreaView, Image, ScrollView } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import tw from 'twrnc';
@@ -11,7 +11,6 @@ import * as ImagePicker from 'expo-image-picker';
 import 'react-native-get-random-values';
 import * as FileSystem from 'expo-file-system';
 import { toByteArray } from 'base64-js';
-
 import Flashcard from '@/components/FlashCard';
 
 interface Card {
@@ -37,7 +36,7 @@ export default function DeckDetailScreen() {
 
   const fetchCards = async () => {
     if (!deckId) return;
-    const { data, error } = await supabase.from('flashcards').select('*').eq('deck_id', deckId);
+    const { data, error } = await supabase.from('flashcards').select('*').eq('deck_id', deckId).order('created_at');
     if (error) Alert.alert('エラー', 'カードの取得に失敗しました。');
     else setCards(data as Card[] || []);
   };
@@ -78,7 +77,6 @@ export default function DeckDetailScreen() {
   const handleAddCard = async () => {
     const isImageDeck = deck_type === 'image';
 
-    // バリデーション
     if (isImageDeck && !frontImage) {
       Alert.alert('エラー', '表面の画像を選択してください。');
       return;
@@ -98,12 +96,11 @@ export default function DeckDetailScreen() {
     // ===== ここからが修正点：データ保存ロジックの修正 =====
     let frontImageUrl: string | null = null;
     let backImageUrl: string | null = null;
-    let finalFrontText: string | null = frontText;
     
-    if (isImageDeck) {
-      finalFrontText = null; // 画像デッキの場合、表面のテキストは保存しない
-      if (frontImage) frontImageUrl = await uploadImage(frontImage, user.id);
-    }
+    // 画像デッキの場合、表面のテキストは強制的にnullにする
+    const finalFrontText = isImageDeck ? null : frontText;
+
+    if (frontImage) frontImageUrl = await uploadImage(frontImage, user.id);
     if (backImage) backImageUrl = await uploadImage(backImage, user.id);
     
     const { error: insertError } = await supabase
@@ -120,6 +117,7 @@ export default function DeckDetailScreen() {
 
     if (insertError) Alert.alert('カード追加エラー', insertError.message);
     else {
+      // モーダルを閉じる時に全てのstateをクリアする
       setFrontText('');
       setBackText('');
       setFrontImage(null);
@@ -133,45 +131,45 @@ export default function DeckDetailScreen() {
     <SafeAreaView style={tw`flex-1 bg-black`}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* カード追加モーダル */}
       <Modal visible={isModalVisible} transparent={true} animationType="slide">
         <View style={tw`flex-1 justify-center items-center bg-black bg-opacity-70`}>
-          <View style={tw`bg-gray-900 p-6 rounded-2xl w-11/12`}>
-            <Text style={[tw`text-white text-xl mb-4`, { fontFamily: 'RobotoSlab-Bold' }]}>新しいカードを追加</Text>
-            
-            {/* ===== ここからが修正点：入力欄の表示切り替え ===== */}
-            {deck_type === 'image' ? (
-              <>
-                <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
-                <TouchableOpacity onPress={() => pickImage('front')} style={tw`w-full h-24 bg-gray-800 rounded-lg justify-center items-center mb-4`}>
-                  {frontImage ? <Image source={{ uri: frontImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択</Text>}
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
-                <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="問題文" placeholderTextColor={tw.color('gray-500')} value={frontText} onChangeText={setFrontText} />
-              </>
-            )}
-            
-            <Text style={tw`text-gray-400 mb-2`}>答え（うら）</Text>
-            <TouchableOpacity onPress={() => pickImage('back')} style={tw`w-full h-24 bg-gray-800 rounded-lg justify-center items-center mb-2`}>
-              {backImage ? <Image source={{ uri: backImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択（任意）</Text>}
-            </TouchableOpacity>
-            <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="テキスト解説（任意）" placeholderTextColor={tw.color('gray-500')} value={backText} onChangeText={setBackText} />
-            {/* ===== ここまでが修正点 ===== */}
-            
-            <TouchableOpacity style={tw`bg-orange-600 rounded-lg py-3 items-center`} onPress={handleAddCard}>
-              <Text style={[tw`text-white font-bold`, { fontFamily: 'RobotoSlab-Bold' }]}>追加</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={tw`mt-4 items-center`} onPress={() => setModalVisible(false)}>
-              <Text style={tw`text-gray-400`}>キャンセル</Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView contentContainerStyle={tw`flex-grow justify-center items-center w-full`}>
+            <View style={tw`bg-gray-900 p-6 rounded-2xl w-11/12`}>
+              <Text style={[tw`text-white text-xl mb-4`, { fontFamily: 'RobotoSlab-Bold' }]}>新しいカードを追加</Text>
+              
+              {/* ===== ここからが修正点：UIの表示切り替え ===== */}
+              {deck_type === 'image' ? (
+                <>
+                  <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
+                  <TouchableOpacity onPress={() => pickImage('front')} style={tw`w-full h-24 bg-gray-800 rounded-lg justify-center items-center mb-4`}>
+                    {frontImage ? <Image source={{ uri: frontImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択</Text>}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
+                  <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="問題文" placeholderTextColor={tw.color('gray-500')} value={frontText} onChangeText={setFrontText} />
+                </>
+              )}
+              
+              <Text style={tw`text-gray-400 mb-2`}>答え（うら）</Text>
+              <TouchableOpacity onPress={() => pickImage('back')} style={tw`w-full h-24 bg-gray-800 rounded-lg justify-center items-center mb-2`}>
+                {backImage ? <Image source={{ uri: backImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択（任意）</Text>}
+              </TouchableOpacity>
+              <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="テキスト解説（任意）" placeholderTextColor={tw.color('gray-500')} value={backText} onChangeText={setBackText} />
+              {/* ===== ここまでが修正点 ===== */}
+              
+              <TouchableOpacity style={tw`bg-orange-600 rounded-lg py-3 items-center`} onPress={handleAddCard}>
+                <Text style={[tw`text-white font-bold`, { fontFamily: 'RobotoSlab-Bold' }]}>追加</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={tw`mt-4 items-center`} onPress={() => setModalVisible(false)}>
+                <Text style={tw`text-gray-400`}>キャンセル</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 
-      {/* 手動ヘッダー */}
       <View style={tw`flex-row items-center p-4`}>
         <TouchableOpacity onPress={() => router.back()} style={tw`p-2`}>
           <FontAwesome5 name="chevron-left" size={24} color="white" />
@@ -179,7 +177,6 @@ export default function DeckDetailScreen() {
         <Text style={[tw`text-white text-xl ml-4`, { fontFamily: 'RobotoSlab-Bold' }]}>{name}</Text>
       </View>
 
-      {/* カード学習エリア */}
       <View style={tw`flex-1 justify-center items-center`}>
         <FlatList
           data={cards}
@@ -200,7 +197,6 @@ export default function DeckDetailScreen() {
         />
       </View>
       
-      {/* カード追加ボタン */}
       <TouchableOpacity
         style={tw`absolute bottom-8 right-8 w-16 h-16 bg-orange-600 rounded-full justify-center items-center shadow-lg`}
         onPress={() => setModalVisible(true)}

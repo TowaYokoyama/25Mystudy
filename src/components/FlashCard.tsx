@@ -88,7 +88,7 @@ export default function Flashcard({ frontText, backText, frontImageUrl, backImag
             {/* ===== ここまで変更 ===== */}
           </Animated.View>
 
-          {/* カードの裏面 (変更なし) */}
+          {/* カードの裏面 */}
           <Animated.View
             style={[
               tw`absolute w-full h-full bg-orange-600 rounded-xl justify-center items-center p-4 shadow-lg`,
@@ -102,9 +102,7 @@ export default function Flashcard({ frontText, backText, frontImageUrl, backImag
             ): (
                  <Text style={[tw`text-white text-xl text-center`, { fontFamily: 'RobotoSlab-Bold' }]}>{backText}</Text>
             )}
-            <Text style={[tw`text-white text-xl text-center`, { fontFamily: 'RobotoSlab-Bold' }]}>
-              {backText}
-            </Text>
+            
           </Animated.View>
         </Animated.View>
       </Pressable>
