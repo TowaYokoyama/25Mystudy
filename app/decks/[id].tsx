@@ -11,14 +11,13 @@ import * as ImagePicker from 'expo-image-picker';
 import 'react-native-get-random-values';
 import * as FileSystem from 'expo-file-system';
 import { toByteArray } from 'base64-js'; // toByteArrayからdecodeに修正
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, FlatList } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { FlatList } from 'react-native-gesture-handler';
 
 import Flashcard from '@/components/FlashCard'; // ファイル名に合わせてFlashcardに修正
 
@@ -125,7 +124,7 @@ export default function DeckDetailScreen() {
 
   const pickImage = async (side: 'front' | 'back') => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images', // こうしｔらエラーでーへん
+      mediaTypes: 'images', // こうしたらエラーでーへん
       allowsEditing: true,
       quality: 1,
     });
