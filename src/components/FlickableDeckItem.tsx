@@ -12,7 +12,7 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router'; // 画面遷移のためにuseRouterをインポート
 
 interface Deck {
   id: string;
@@ -23,16 +23,17 @@ interface Deck {
 
 interface Props {
   deck: Deck;
-  onDelete: () => void; // 引数をなくし、よりシンプルに
+  onDelete: () => void;
 }
 
 const ITEM_HEIGHT = 80;
-const DELETE_THRESHOLD = -ITEM_HEIGHT * 1.5;
+const DELETE_THRESHOLD = -ITEM_HEIGHT;
 
 export default function FlickableDeckItem({ deck, onDelete }: Props) {
+  const router = useRouter(); // ナビゲーションのためにrouterを取得
   const translateY = useSharedValue(0);
   const itemHeight = useSharedValue(ITEM_HEIGHT);
-  const marginValue = useSharedValue(12); // marginBottom
+  const marginValue = useSharedValue(12);
 
   const deleteDeck = () => {
     Alert.alert(
@@ -48,7 +49,6 @@ export default function FlickableDeckItem({ deck, onDelete }: Props) {
               Alert.alert('削除エラー', error.message);
               translateY.value = withTiming(0);
             } else {
-              // アニメーションで高さを0にしてから、親コンポーネントに削除を通知
               itemHeight.value = withTiming(0, { duration: 200 });
               marginValue.value = withTiming(0, { duration: 200 }, () => {
                 runOnJS(onDelete)();
@@ -61,7 +61,18 @@ export default function FlickableDeckItem({ deck, onDelete }: Props) {
     );
   };
 
-  const panGesture = Gesture.Pan()
+  // ===== ここからが新しいロジック =====
+
+  // 1. タップした時の処理（画面遷移）を定義
+  const tap = Gesture.Tap()
+    .maxDuration(250)
+    .onStart(() => {
+      // ジェスチャーのスレッドから、UIスレッドのナビゲーションを実行するためにrunOnJSを使う
+      runOnJS(router.push)({ pathname: "/decks/[id]", params: { id: deck.id, name: deck.name, deck_type: deck.deck_type } });
+    });
+
+  // 2. 上にフリックした時の処理（削除）を定義
+  const pan = Gesture.Pan()
     .activeOffsetY([-10, 10])
     .onUpdate((event) => {
       if (event.translationY < 0) {
@@ -76,6 +87,11 @@ export default function FlickableDeckItem({ deck, onDelete }: Props) {
       }
     });
 
+  // 3. タップとフリック、どちらのジェスチャーが成立するかを競わせる
+  const composed = Gesture.Race(pan, tap);
+
+  // ===== ここまでが新しいロジック =====
+
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
     height: itemHeight.value,
@@ -84,19 +100,18 @@ export default function FlickableDeckItem({ deck, onDelete }: Props) {
   }));
 
   return (
-    <GestureDetector gesture={panGesture}>
+    <GestureDetector gesture={composed}>
       <Animated.View style={animatedStyle}>
-        <Link href={{ pathname: "/decks/[id]", params: { id: deck.id, name: deck.name, deck_type: deck.deck_type } }} asChild>
-          <View style={tw`bg-gray-900 p-4 rounded-lg flex-row items-center h-full`}>
-            <FontAwesome5 name={deck.deck_type === 'image' ? 'image' : 'font'} size={20} color={tw.color('gray-400')} />
-            <View style={tw`ml-4 flex-1`}>
-              <Text style={[tw`text-white text-lg`, { fontFamily: 'RobotoSlab-Bold' }]} numberOfLines={1}>{deck.name}</Text>
-              {deck.description && (
-                <Text style={[tw`text-gray-400 mt-1`, { fontFamily: 'RobotoSlab-Regular' }]} numberOfLines={1}>{deck.description}</Text>
-              )}
-            </View>
+        {/* Linkコンポーネントは不要になったので削除 */}
+        <View style={tw`bg-gray-900 p-4 rounded-lg flex-row items-center h-full`}>
+          <FontAwesome5 name={deck.deck_type === 'image' ? 'image' : 'font'} size={20} color={tw.color('gray-400')} />
+          <View style={tw`ml-4 flex-1`}>
+            <Text style={[tw`text-white text-lg`, { fontFamily: 'RobotoSlab-Bold' }]} numberOfLines={1}>{deck.name}</Text>
+            {deck.description && (
+              <Text style={[tw`text-gray-400 mt-1`, { fontFamily: 'RobotoSlab-Regular' }]} numberOfLines={1}>{deck.description}</Text>
+            )}
           </View>
-        </Link>
+        </View>
       </Animated.View>
     </GestureDetector>
   );

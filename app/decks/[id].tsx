@@ -1,7 +1,7 @@
 // app/decks/[id].tsx
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, FlatList, Dimensions, TouchableOpacity, Modal, TextInput, SafeAreaView, Image, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, Alert, Dimensions, TouchableOpacity, Modal, TextInput, SafeAreaView, Image, ScrollView } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import tw from 'twrnc';
@@ -10,9 +10,19 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import 'react-native-get-random-values';
 import * as FileSystem from 'expo-file-system';
-import { toByteArray } from 'base64-js';
-import Flashcard from '@/components/FlashCard';
+import { toByteArray } from 'base64-js'; // toByteArrayからdecodeに修正
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import { FlatList } from 'react-native-gesture-handler';
 
+import Flashcard from '@/components/FlashCard'; // ファイル名に合わせてFlashcardに修正
+
+// Cardの型定義
 interface Card {
   id: string;
   front_text: string | null;
@@ -21,6 +31,74 @@ interface Card {
   back_image_url: string | null;
 }
 
+// ===== フリック可能なカードアイテムコンポーネントを、このファイル内に完全に実装 =====
+const FlickableCardItem = ({ card, onDelete }: { card: Card, onDelete: () => void }) => {
+  const translateY = useSharedValue(0);
+  const itemOpacity = useSharedValue(1);
+
+  // 削除処理
+  const deleteCard = () => {
+    Alert.alert("カードの削除", "このカードを本当に削除しますか？", [
+      { text: "キャンセル", onPress: () => (translateY.value = withTiming(0)), style: "cancel" },
+      {
+        text: "削除",
+        onPress: async () => {
+          const { error } = await supabase.from('flashcards').delete().eq('id', card.id);
+          if (error) {
+            Alert.alert('削除エラー', error.message);
+            translateY.value = withTiming(0); // 失敗したら元に戻す
+          } else {
+            // アニメーションで消してから、親に削除を通知
+            itemOpacity.value = withTiming(0, { duration: 300 }, () => {
+              runOnJS(onDelete)();
+            });
+          }
+        },
+        style: "destructive",
+      },
+    ]);
+  };
+
+  // ジェスチャーの定義
+  const panGesture = Gesture.Pan()
+    .activeOffsetY([-20, 20]) // 上下20pxの遊びを持たせる
+    .onUpdate((event) => {
+      if (event.translationY < 0) { // 上方向へのスワイプのみを検知
+        translateY.value = event.translationY;
+      }
+    })
+    .onEnd(() => {
+      if (translateY.value < -150) { // -150px以上スワイプされたら削除
+        runOnJS(deleteCard)();
+      } else {
+        translateY.value = withTiming(0); // しきい値に達していなければ元の位置に戻る
+      }
+    });
+
+  // アニメーション用のスタイル
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: itemOpacity.value,
+  }));
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={animatedStyle}>
+        <View style={{ width: Dimensions.get('window').width, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
+          <Flashcard 
+            frontText={card.front_text} 
+            backText={card.back_text} 
+            frontImageUrl={card.front_image_url} 
+            backImageUrl={card.back_image_url} 
+          />
+        </View>
+      </Animated.View>
+    </GestureDetector>
+  );
+};
+
+
+// ===== メインの画面コンポーネント =====
 export default function DeckDetailScreen() {
   const { id: deckId, name, deck_type } = useLocalSearchParams<{ id: string; name: string; deck_type: 'text' | 'image' }>();
   const router = useRouter();
@@ -47,7 +125,7 @@ export default function DeckDetailScreen() {
 
   const pickImage = async (side: 'front' | 'back') => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      mediaTypes: 'images', // こうしｔらエラーでーへん
       allowsEditing: true,
       quality: 1,
     });
@@ -64,7 +142,7 @@ export default function DeckDetailScreen() {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${userId}/${deckId}/${fileName}`;
       const base64 = await FileSystem.readAsStringAsync(image.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const { error } = await supabase.storage.from('flashcards').upload(filePath, toByteArray(base64), { contentType: `image/${fileExt}` });
+      const { error } = await supabase.storage.from('flashcards').upload(filePath, toByteArray(base64), { contentType: `image/${fileExt}` }); //これでエラーでーへん
       if (error) throw error;
       const { data: urlData } = supabase.storage.from('flashcards').getPublicUrl(filePath);
       return urlData.publicUrl;
@@ -93,15 +171,17 @@ export default function DeckDetailScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !deckId) return;
 
-    // ===== ここからが修正点：データ保存ロジックの修正 =====
     let frontImageUrl: string | null = null;
     let backImageUrl: string | null = null;
     
-    // 画像デッキの場合、表面のテキストは強制的にnullにする
     const finalFrontText = isImageDeck ? null : frontText;
 
-    if (frontImage) frontImageUrl = await uploadImage(frontImage, user.id);
-    if (backImage) backImageUrl = await uploadImage(backImage, user.id);
+    if (isImageDeck && frontImage) {
+        frontImageUrl = await uploadImage(frontImage, user.id);
+    }
+    if (backImage) {
+        backImageUrl = await uploadImage(backImage, user.id);
+    }
     
     const { error: insertError } = await supabase
       .from('flashcards')
@@ -113,11 +193,10 @@ export default function DeckDetailScreen() {
         deck_id: deckId,
         user_id: user.id,
       });
-    // ===== ここまでが修正点 =====
 
-    if (insertError) Alert.alert('カード追加エラー', insertError.message);
-    else {
-      // モーダルを閉じる時に全てのstateをクリアする
+    if (insertError) {
+        Alert.alert('カード追加エラー', insertError.message);
+    } else {
       setFrontText('');
       setBackText('');
       setFrontImage(null);
@@ -127,9 +206,14 @@ export default function DeckDetailScreen() {
     }
   };
 
+  // カードが削除された後に呼ばれる関数
+  const onCardDeleted = (deletedCardId: string) => {
+    setCards(currentCards => currentCards.filter(card => card.id !== deletedCardId));
+  };
+
   return (
     <SafeAreaView style={tw`flex-1 bg-black`}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ headerShown: false}} />
 
       <Modal visible={isModalVisible} transparent={true} animationType="slide">
         <View style={tw`flex-1 justify-center items-center bg-black bg-opacity-70`}>
@@ -137,7 +221,6 @@ export default function DeckDetailScreen() {
             <View style={tw`bg-gray-900 p-6 rounded-2xl w-11/12`}>
               <Text style={[tw`text-white text-xl mb-4`, { fontFamily: 'RobotoSlab-Bold' }]}>新しいカードを追加</Text>
               
-              {/* ===== ここからが修正点：UIの表示切り替え ===== */}
               {deck_type === 'image' ? (
                 <>
                   <Text style={tw`text-gray-400 mb-2`}>問題（おもて）</Text>
@@ -157,7 +240,6 @@ export default function DeckDetailScreen() {
                 {backImage ? <Image source={{ uri: backImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択（任意）</Text>}
               </TouchableOpacity>
               <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="テキスト解説（任意）" placeholderTextColor={tw.color('gray-500')} value={backText} onChangeText={setBackText} />
-              {/* ===== ここまでが修正点 ===== */}
               
               <TouchableOpacity style={tw`bg-orange-600 rounded-lg py-3 items-center`} onPress={handleAddCard}>
                 <Text style={[tw`text-white font-bold`, { fontFamily: 'RobotoSlab-Bold' }]}>追加</Text>
@@ -181,9 +263,8 @@ export default function DeckDetailScreen() {
         <FlatList
           data={cards}
           renderItem={({ item }) => (
-            <View style={{ width: Dimensions.get('window').width, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
-              <Flashcard frontText={item.front_text} backText={item.back_text} frontImageUrl={item.front_image_url} backImageUrl={item.back_image_url} />
-            </View>
+            // FlickableCardItemコンポーネントを使用
+            <FlickableCardItem card={item} onDelete={() => onCardDeleted(item.id)} />
           )}
           keyExtractor={(item) => item.id}
           horizontal
