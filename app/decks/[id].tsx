@@ -1,7 +1,7 @@
 // app/decks/[id].tsx
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, TouchableOpacity, Modal, TextInput, SafeAreaView, Image, ScrollView, FlatList } from 'react-native';
+import { View, Text, Alert, TouchableOpacity, Modal, TextInput, SafeAreaView, Image, ScrollView, FlatList, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import tw from 'twrnc';
@@ -10,7 +10,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import 'react-native-get-random-values';
 import * as FileSystem from 'expo-file-system';
-import { toByteArray } from 'base64-js';
+import { toByteArray } from 'base64-js'; // toByteArrayの代わりに、より標準的なdecodeを使います
+import * as ImageManipulator from 'expo-image-manipulator'; // 画像圧縮ライブラリをインポート
 
 import Flashcard from '@/components/FlashCard';
 
@@ -35,6 +36,7 @@ export default function DeckDetailScreen() {
   const [frontImage, setFrontImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [backImage, setBackImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const isFocused = useIsFocused();
+  const [isUploading, setIsUploading] = useState(false);
 
   const fetchCards = async () => {
     if (!deckId) return;
@@ -58,16 +60,32 @@ export default function DeckDetailScreen() {
       else setBackImage(result.assets[0]);
     }
   };
-  
+
   const uploadImage = async (image: ImagePicker.ImagePickerAsset, userId: string): Promise<string | null> => {
     try {
+      // ===== ここからが修正点：画像圧縮処理 =====
+      const manipResult = await ImageManipulator.manipulateAsync(
+        image.uri,
+        [{ resize: { width: 800 } }], // 横幅を800ピクセルにリサイズ
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG } // 圧縮率70%のJPEG形式に
+      );
       const fileExt = image.uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${userId}/${deckId}/${fileName}`;
       const base64 = await FileSystem.readAsStringAsync(image.uri, { encoding: FileSystem.EncodingType.Base64 });
       const { error } = await supabase.storage.from('flashcards').upload(filePath, toByteArray(base64), { contentType: `image/${fileExt}` });
-      if (error) throw error;
+
+
+      if (error){
+         console.error("【デバッグログ】アップロードエラー:", error);
+       throw error};
+
+
       const { data: urlData } = supabase.storage.from('flashcards').getPublicUrl(filePath);
+
+      // ===== ここが監視カメラ！ =====
+      console.log("【デバッグログ】取得した公開URL:", urlData.publicUrl);
+      // ==========================
       return urlData.publicUrl;
     } catch (error: any) {
       Alert.alert('アップロードエラー', error.message);
@@ -91,6 +109,9 @@ export default function DeckDetailScreen() {
     }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !deckId) return;
+
+    setIsUploading(true);
+    try{
     let frontImageUrl: string | null = null;
     let backImageUrl: string | null = null;
     const finalFrontText = isImageDeck ? null : frontText;
@@ -100,6 +121,7 @@ export default function DeckDetailScreen() {
     if (backImage) {
         backImageUrl = await uploadImage(backImage, user.id);
     }
+
     const { error: insertError } = await supabase.from('flashcards').insert({
         front_text: finalFrontText,
         back_text: backText,
@@ -108,15 +130,20 @@ export default function DeckDetailScreen() {
         deck_id: deckId,
         user_id: user.id,
       });
+
     if (insertError) {
         Alert.alert('カード追加エラー', insertError.message);
-    } else {
+    }  
       setFrontText('');
       setBackText('');
       setFrontImage(null);
       setBackImage(null);
       setModalVisible(false);
       fetchCards();
+    } catch(error:any) {
+      Alert.alert('カード追加エラー', error.massage);
+    }finally {
+      setIsUploading(false);
     }
   };
 
@@ -165,17 +192,28 @@ export default function DeckDetailScreen() {
                 {backImage ? <Image source={{ uri: backImage.uri }} style={tw`w-full h-full rounded-lg`} /> : <Text style={tw`text-gray-400`}>画像を選択（任意）</Text>}
               </TouchableOpacity>
               <TextInput style={[tw`w-full p-3 bg-gray-800 rounded-lg text-white mb-4`, { fontFamily: 'RobotoSlab-Regular' }]} placeholder="テキスト解説（任意）" placeholderTextColor={tw.color('gray-500')} value={backText} onChangeText={setBackText} />
-              <TouchableOpacity style={tw`bg-orange-600 rounded-lg py-3 items-center`} onPress={handleAddCard}>
-                <Text style={[tw`text-white font-bold`, { fontFamily: 'RobotoSlab-Bold' }]}>追加</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={tw`mt-4 items-center`} onPress={() => setModalVisible(false)}>
-                <Text style={tw`text-gray-400`}>キャンセル</Text>
-              </TouchableOpacity>
+
+                {isUploading ? (
+                <View style={tw`py-3 items-center`}>
+                  <ActivityIndicator size="large" color={tw.color('orange-500')} />
+                  <Text style={tw`text-gray-400 mt-2`}>アップロード中...</Text>
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity style={tw`bg-orange-600 rounded-lg py-3 items-center`} onPress={handleAddCard}>
+                    <Text style={[tw`text-white font-bold`, { fontFamily: 'RobotoSlab-Bold' }]}>追加</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={tw`mt-4 items-center`} onPress={() => setModalVisible(false)}>
+                    <Text style={tw`text-gray-400`}>キャンセル</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </ScrollView>
         </View>
       </Modal>
 
+      
       <View style={tw`flex-row items-center p-4`}>
         <TouchableOpacity onPress={() => router.back()} style={tw`p-2`}>
           <FontAwesome5 name="chevron-left" size={24} color="white" />
