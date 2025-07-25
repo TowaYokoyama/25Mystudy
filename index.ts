@@ -1,0 +1,1 @@
+import 'expo-router/entry'; //エクスポで読み込みを完結
